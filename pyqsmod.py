@@ -295,9 +295,8 @@ def lineProcUserInfo(this_line, game):
         game.teams[new_name] = team
         game.ctf[new_name] = {'0': 0, '1': 0, '2': 0, '3': 0}
         game.weapons[new_name] = {
-            'SHO': 0, 'GAU': 0, 'MAC': 0, 'GRE': 0,
-            'ROC': 0, 'PLA': 0, 'RAI': 0, 'LIG': 0,
-            'BFG': 0, 'TEL': 0, 'NAI': 0, 'CHA': 0
+            'SHO': 0, 'GAU': 0, 'MAC': 0, 'GRE': 0, 'ROC': 0, 'PLA': 0,
+            'RAI': 0, 'LIG': 0, 'BFG': 0, 'TEL': 0, 'NAI': 0, 'CHA': 0
         }
 
         c_idx = this_line.find('ClientU')
@@ -333,8 +332,7 @@ def lineProcScores(this_line, game):
     result = regex.search(this_line)
 
     [time, score, ping, client, nick] = [
-        result.group(1), result.group(2),
-        result.group(3), result.group(4),
+        result.group(1), result.group(2), result.group(3), result.group(4),
         result.group(5)
     ]
 
@@ -345,8 +343,8 @@ def lineProcScores(this_line, game):
     # percentage of the time played by the 1st player who joined the game.
     # This: a) minimises the possibility of wrong item assignment due to
     # multiple connections and disconnections; b) results in fairer statistics
-    if (game.time - game.ptime[nick]) > MINPLAY * (game.time -
-                                                   min(game.ptime.values())):
+    if (game.time - game.ptime[nick]) > MINPLAY *
+    (game.time - min(game.ptime.values())):
         game.validp.append(nick)
     return game
 
@@ -434,15 +432,14 @@ def player_stats_total(cgames):
             pass
         else:
             one_player = {
-                'name': name,  'games': len(hand),  'won': win,
-                'time': time,  'hand': sum(hand)/len(hand),
+                'name': name, 'games': len(hand), 'won': win, 'time': time,
+                'hand': sum(hand)/len(hand),
                 'ping': [min(ping), sum(ping)/len(ping), max(ping)],
                 'frags': frags, 'deaths': deaths, 'suics': suics,
                 'wfrags': wfrags, 'excellent': awards_e,
                 'impressive': awards_i, 'defence': awards_d,
-                'capture': awards_c,  'assist': awards_a,
-                'weapons': csum(weapon_count),
-                'ctf': csum(ctf_events)
+                'capture': awards_c, 'assist': awards_a,
+                'weapons': csum(weapon_count), 'ctf': csum(ctf_events)
             }
             all_players.append(one_player)
     return all_players
