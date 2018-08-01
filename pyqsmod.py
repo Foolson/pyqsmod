@@ -502,8 +502,10 @@ def player_stats(cgames, game_number, player_name):
     else:
         ctf_events = (0, 0, 0)
 
-    key = ['win', 'time', 'handicap', 'ping', 'frags', 'deaths', 'suics',
-           'wfrags', 'awards', 'weapon count', 'ctf_events']
+    key = [
+        'win', 'time', 'handicap', 'ping', 'frags', 'deaths', 'suics',
+        'wfrags', 'awards', 'weapon count', 'ctf_events'
+    ]
 
     return [key, win, time, hand, ping, frags, deaths, suics,
             wfrags, awards, weapon_count, ctf_events]
@@ -553,9 +555,8 @@ def set_gametype(server):
     gametypes = {
         0: 'Death Match', 1: '1 vs 1', 2: 'Single Death Match',
         3: 'Team Death Match', 4: 'Capture the Flag', 5: 'One-Flag CTF',
-        6: 'Overload', 7: 'Harvester', 8: 'Elimination',
-        9: 'CTF Elimination', 10: 'Last Man Standing',
-        11: 'Double Elimination', 12: 'Domination'
+        6: 'Overload', 7: 'Harvester', 8: 'Elimination', 9: 'CTF Elimination',
+        10: 'Last Man Standing', 11: 'Double Elimination', 12: 'Domination'
     }
 
     # If user specifies game type, report it regardless of what pyqscore parsed
@@ -614,13 +615,13 @@ def make_main_table(R):
     '''List storing main data'''
     main_table_data = []
     for player in R:
-        main_table_data.append([player['name'], player['games'], player['won'],
-                                str(timedelta(seconds=player['time'])),
-                                player['hand'], player['ping'][0],
-                                player['ping'][1], player['ping'][2],
-                                player['frags'], player['deaths'],
-                                player['suics'], player['wfrags'],
-                                player['excellent'], player['impressive']])
+        main_table_data.append([
+            player['name'], player['games'], player['won'],
+            str(timedelta(seconds=player['time'])), player['hand'],
+            player['ping'][0], player['ping'][1], player['ping'][2],
+            player['frags'], player['deaths'], player['suics'],
+            player['wfrags'], player['excellent'], player['impressive']
+        ])
     return main_table_data
 
 
