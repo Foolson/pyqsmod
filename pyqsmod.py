@@ -54,7 +54,7 @@ MINPLAY = 0.5
 # match. The match lasts for 10 minutes. If MINPLAY is 0.7, only the
 # statistics of players who joined during the first 3 minutes will count.
 
-NUMBER_OF_QUOTES = 5
+NUMBER_OF_QUOTES = 15
 # Number of random quotes displayed
 
 GTYPE_OVERRIDE = ''
@@ -119,7 +119,7 @@ def read_log(log_file):
                 log[count] = line
                 k_new += 1
             count += 1
-    return log, count
+    return log
 
 
 def mainProcessing(log):
@@ -151,7 +151,7 @@ def mainProcessing(log):
 def lineProcInit(line, game, server):
     '''Process game init lines'''
 
-    regex = re.compile('mapname[\\\\]([\w]*)')
+    regex = re.compile(r'mapname[\\]([\w]*)')
     mapname = regex.search(line).group(1)
     game.mapname = mapname
 
@@ -205,24 +205,6 @@ def oneGameProc(lines, game, server):
     return game, server, valid_game
 
 
-def lineProcItems(line, game):
-    '''Process item lines'''
-
-    parts = this_line[13:].split(' ')
-    client = parts[0]
-    item = parts[1][:-1]
-    # try/except clause to avoid rare cases of damaged logs.
-    # Items assigned to player who currently owns specified id.
-    # In case of client disconnection this may give an erroneous
-    # count, a circumstance minimised by only storing players with
-    # a minimum playing time. See game.validp in lineProcScores().
-    try:
-        game.itemsp[game.pid[client]].append(item)
-    except:
-        pass
-    return game
-
-
 def lineProcKills(this_line, game, server):
     '''Process kill lines'''
 
@@ -230,7 +212,7 @@ def lineProcKills(this_line, game, server):
     # If somebody's nick contains the string ' killed ',
     # we're screwed
 
-    regex = re.compile('\d:[\s](.*)')         # Fragger's nick
+    regex = re.compile(r'\d:[\s](.*)')         # Fragger's nick
     try:
         # Does this really need a try/except clause?
         killer = regex.search(this_line[17:k_idx]).group(1)
@@ -276,7 +258,7 @@ def lineProcAwards(this_line, game):
     '''Process line awards lines'''
 
     g_idx = this_line.find(' gained ')
-    regex = re.compile('\d:\s(\S*\s?\S*)')        # Player name
+    regex = re.compile(r'\d:\s(\S*\s?\S*)')        # Player name
     result = regex.search(this_line[0:g_idx])
     # Assist, Capture, Defence, Impressive, Excellent
     name, award = [result.group(1), this_line[g_idx+12:g_idx+13]]
@@ -290,17 +272,17 @@ def lineProcAwards(this_line, game):
 def lineProcUserInfo(this_line, game):
     '''Process user info lines'''
 
-    regex = re.compile('Changed:[\s]([\d]*)')    # client id
+    regex = re.compile(r'Changed:[\s]([\d]*)')    # client id
     new_id = regex.search(this_line).group(1)
-    regex = re.compile('n\\\\([^\\\\]*)')        # client name
+    regex = re.compile(r'n\\([^\\]*)')        # client name
     new_name = regex.search(this_line).group(1)
     try:
-        regex = re.compile('\\\\hc\\\\(\d*)')    # handicap
+        regex = re.compile(r'\\hc\\(\d*)')    # handicap
         handicap = regex.search(this_line).group(1)
     except:
         handicap = 100
 
-    regex = re.compile('\\\\t\\\\(\d)')
+    regex = re.compile(r'\\t\\(\d)')
     team = regex.search(this_line).group(1)
 
     if new_name not in game.pid.values():
@@ -341,11 +323,11 @@ def lineProcScores(this_line, game):
     #  5:40 score: 6  ping: 85  client: 2 Iagoi
     # 10:14 score: 12  ping: 62  client: 2 Iagoi
     regex = re.compile(
-        '(\s?\s?\s? \S*) '
-        '[\s][^\s]*[\s] (\S?\d*) '
-        '[\s]+[^\s]*[\s] (\d*) '
-        '[\s]+[^\s]*[\s] '
-        '(\d*) \s (.*)',
+        r'(\s?\s?\s? \S*) '
+        r'[\s][^\s]*[\s] (\S?\d*) '
+        r'[\s]+[^\s]*[\s] (\d*) '
+        r'[\s]+[^\s]*[\s] '
+        r'(\d*) \s (.*)',
         re.VERBOSE
     )
     result = regex.search(this_line)
@@ -358,7 +340,7 @@ def lineProcScores(this_line, game):
 
     game.scores.append([time, score, ping, client, nick])
     game.players[nick] = (ping, game.pos)
-    game.pos += 1                   # Increase position for next player
+    game.pos += 1  # Increase position for next player
     # Players are considered 'valid' if time played is greater than a
     # percentage of the time played by the 1st player who joined the game.
     # This: a) minimises the possibility of wrong item assignment due to
@@ -426,7 +408,6 @@ def player_stats_total(cgames):
         hand, ping, weapon_count, ctf_events = [], [], [], []
         frags, deaths, suics, wfrags = 0, 0, 0, 0
         awards_a, awards_c, awards_d, awards_e, awards_i = 0, 0, 0, 0, 0
-        items = []
         for i in range(len(cgames)):
             if name not in cgames[i].validp:  # ignore no valid players
                 pass
@@ -503,7 +484,6 @@ def player_stats(cgames, game_number, player_name):
     deaths = game.deathsp[player_name]
     suics = len([n for n in game.killsp[player_name]])
     frags = sum(game.weapons[player_name].values())
-    weapons = [n[1] for n in game.killsp[player_name] if n[0] != player_name]
     weapon_count = []  # per weapon frags
 
     wlist = [
@@ -693,7 +673,7 @@ def make_quotes_table(quotes_list):
 
     quotes_table = []
     if len(quotes_list) > 0:
-        for i in range(NUMBER_OF_QUOTES):
+        for _ in range(NUMBER_OF_QUOTES):
             a = quotes_list[int(randint(0, len(quotes_list)-1))]
             quotes_table.append([name_colour(a[0]), a[1]])
     return quotes_table
@@ -713,7 +693,7 @@ def make_ctf_table(R):
 def logToData(log_file):
     '''Main wrapper to get the job done'''
 
-    log, LINE_COUNT = read_log(log_file)
+    log = read_log(log_file)
     server, cgames = mainProcessing(log)
     quotes_list = get_quotes(cgames)
 
@@ -730,22 +710,20 @@ def logToData(log_file):
     for player in R:
         player['name'] = name_colour(player['name'])
 
-    # Put together data tables
-    main_table_data = make_main_table(R)
-    weapons_table = make_weapons_table(R)
-    stats_table = make_stats_table(R)
-    quotes_table = make_quotes_table(quotes_list)
-    ctf_table = make_ctf_table(R)
+    data = {
+        'server': {
+            'hostname': server.hostname,
+            'gtype': server.gtype,
+            'time': server.time,
+            'frags': server.frags
+        },
+        'main': make_main_table(R),
+        'stats': make_stats_table(R),
+        'weapons': make_weapons_table(R),
+        'quotes': make_quotes_table(quotes_list)
+    }
 
-    list = []
-
-    list.append([server.hostname, server.gtype, server.time, server.frags])
-    list.append(main_table_data)
-    list.append(stats_table)
-    list.append(weapons_table)
-    list.append(quotes_table)
-
-    return list
+    return data
 
 
 def main():
