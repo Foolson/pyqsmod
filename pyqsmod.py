@@ -157,7 +157,7 @@ def lineProcInit(line, game, server):
 
     idx = line.find('sv_hostname') + 11
     hostname = line[idx:idx+50].split('\\')[1]  # Does this always work?
-    server.hostname = hostname                  # I hope so anyway
+    server.hostname = hostname  # I hope so anyway
 
     idx = line.find('g_gametype')
     game.gametype = line[idx+11]
@@ -212,7 +212,7 @@ def lineProcKills(this_line, game, server):
     # If somebody's nick contains the string ' killed ',
     # we're screwed
 
-    regex = re.compile(r'\d:[\s](.*)')         # Fragger's nick
+    regex = re.compile(r'\d:[\s](.*)')  # Fragger's nick
     try:
         # Does this really need a try/except clause?
         killer = regex.search(this_line[17:k_idx]).group(1)
@@ -221,8 +221,8 @@ def lineProcKills(this_line, game, server):
 
     d_idx = k_idx + 6
     b_idx = this_line.rfind(' b')
-    killed = this_line[d_idx + 2:b_idx]           # Victim
-    weapon = this_line[b_idx + 7 + 1:-1]          # Weapon
+    killed = this_line[d_idx + 2:b_idx]  # Victim
+    weapon = this_line[b_idx + 7 + 1:-1]  # Weapon
     # try statement needed to avoid rare cases of damaged logs:
     # We're looking stuff up on a dictionary, so if the line is
     # broken the key may not exist and python complains
@@ -258,7 +258,7 @@ def lineProcAwards(this_line, game):
     '''Process line awards lines'''
 
     g_idx = this_line.find(' gained ')
-    regex = re.compile(r'\d:\s(\S*\s?\S*)')        # Player name
+    regex = re.compile(r'\d:\s(\S*\s?\S*)')  # Player name
     result = regex.search(this_line[0:g_idx])
     # Assist, Capture, Defence, Impressive, Excellent
     name, award = [result.group(1), this_line[g_idx+12:g_idx+13]]
@@ -272,12 +272,12 @@ def lineProcAwards(this_line, game):
 def lineProcUserInfo(this_line, game):
     '''Process user info lines'''
 
-    regex = re.compile(r'Changed:[\s]([\d]*)')    # client id
+    regex = re.compile(r'Changed:[\s]([\d]*)')  # client id
     new_id = regex.search(this_line).group(1)
-    regex = re.compile(r'n\\([^\\]*)')        # client name
+    regex = re.compile(r'n\\([^\\]*)')  # client name
     new_name = regex.search(this_line).group(1)
     try:
-        regex = re.compile(r'\\hc\\(\d*)')    # handicap
+        regex = re.compile(r'\\hc\\(\d*)')  # handicap
         handicap = regex.search(this_line).group(1)
     except:
         handicap = 100
