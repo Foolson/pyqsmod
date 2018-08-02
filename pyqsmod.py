@@ -34,39 +34,6 @@ __license__ = "GPLv2"
 __copyright__ = "Copyright (C) 2011  Jose Rodriguez, \
     Copyright (C) 2018  Johan Olsson"
 
-# =======================         OPTIONS         ======================= #
-
-MAXPLAYERS = 150
-# Maximum number of players displayed in HTML output
-
-SORT_OPTION = 'time'
-# How to sort table columns. Options: deaths, frag_death_ratio,
-# frags, games, ping, time, won, won_percentage
-
-BAN_LIST = ['UnnamedPlayer', 'a_player_I_dont_like']
-# Comma-separated list containing the nicks of undesired players.
-# Nicks must include the colour codes and be inside quotes.
-
-MINPLAY = 0.5
-# From 0 to 1, minimum fraction of time a player has to play in a game
-# relative to that of the player who played for longer in order appear
-# in the statistics. Example: Player A is the first player joining a
-# match. The match lasts for 10 minutes. If MINPLAY is 0.7, only the
-# statistics of players who joined during the first 3 minutes will count.
-
-NUMBER_OF_QUOTES = 15
-# Number of random quotes displayed
-
-GTYPE_OVERRIDE = ''
-# If you have a mixed log with different game types, this will override
-# the game type read from the log. You can type what you want here.
-
-DISPLAY_CTF_TABLE = True
-# Display or not the CTF table in the HTML output. This will only work
-# if there are players with CTF-related data (True/False)
-
-# ====================================================================== #
-
 
 class Game:
     '''Class with no methods used to store game data'''
@@ -113,16 +80,14 @@ def read_log(log_file):
     with open(log_file, 'r') as f:
         for line in f:
             # Ignore lines from previous runs
-            if count < Nlines:
-                pass
-            else:
+            if not count < Nlines:
                 log[count] = line
                 k_new += 1
             count += 1
     return log
 
 
-def mainProcessing(log):
+def mainProcessing(log, min_play):
     '''Main processing function'''
 
     server = Server()
@@ -136,7 +101,9 @@ def mainProcessing(log):
             N += 1
             game.pos = 1  # Player's score position
             game, server = lineProcInit(line, game, server)
-            game, server, valid_game = oneGameProc(lines, game, server)
+            game, server, valid_game = oneGameProc(
+                lines, game, server, min_play
+            )
             if valid_game:
                 if len(game.players) == 0:
                     continue
@@ -155,29 +122,31 @@ def lineProcInit(line, game, server):
     mapname = regex.search(line).group(1)
     game.mapname = mapname
 
+    # Does this always work? I hope so anyway
     idx = line.find('sv_hostname') + 11
-    hostname = line[idx:idx+50].split('\\')[1]  # Does this always work?
-    server.hostname = hostname  # I hope so anyway
+    hostname = line[idx:idx+50].split('\\')[1]
+    server.hostname = hostname
 
     idx = line.find('g_gametype')
     game.gametype = line[idx+11]
     try:
         server.gtype = int(game.gametype)
     except(ValueError):
-        server.gtype = 0  # Default to DM if bad things happen
+        server.gtype = 0  # Default to DM if bad things happened
     return game, server
 
 
-def oneGameProc(lines, game, server):
+def oneGameProc(lines, game, server, min_play):
     '''Process lines from one single game'''
 
     valid_game = False
+
+    # Process more frequent lines first: Items >> Kill > Userinfo > Awards
     for line in lines:
-        # Process more frequent lines first: Items >> Kill > Userinfo > Awards
+        # I don't need items at the moment, so pass and save a lot of time. If
+        # they are needed the following function provide everything required
+        # to keep track of the items collected by each player.
         if line.find(' Item: ') > 0:
-            # I don't need items at the moment, so pass and save a lot of time.
-            # If they are needed the following function provide everything
-            # required to keep track of the items collected by each player.
             continue
         elif line.find(' Kill: ') > 0:
             game, server = lineProcKills(line, game, server)
@@ -190,7 +159,7 @@ def oneGameProc(lines, game, server):
         elif line.find(' say:') > 0:
             game = lineProcQuotes(line, game)
         elif line.find(' score: ') > 0:
-            game = lineProcScores(line, game)
+            game = lineProcScores(line, game, min_play)
         elif line.find(' red:') > 0:
             game.ctfscores = (line[11], line[19])
         elif ((line.find('Exit: Timelimit hit') > 0) or
@@ -208,13 +177,16 @@ def oneGameProc(lines, game, server):
 def lineProcKills(this_line, game, server):
     '''Process kill lines'''
 
+    # 3:20 Kill: 3 2 10: Gargoyle killed Gargoyle by MOD_RAILGUN
+    # 100:04 Kill: 0 1 11: ^4kernel panic killed Kyonshi by MOD_PLASMA
+
+    # If somebody's nick contains the string ' killed ', we're screwed
     k_idx = this_line.find(' killed ')
-    # If somebody's nick contains the string ' killed ',
-    # we're screwed
 
     regex = re.compile(r'\d:[\s](.*)')  # Fragger's nick
+
+    # Does this really need a try/except clause?
     try:
-        # Does this really need a try/except clause?
         killer = regex.search(this_line[17:k_idx]).group(1)
     except:
         return game, server
@@ -223,9 +195,10 @@ def lineProcKills(this_line, game, server):
     b_idx = this_line.rfind(' b')
     killed = this_line[d_idx + 2:b_idx]  # Victim
     weapon = this_line[b_idx + 7 + 1:-1]  # Weapon
-    # try statement needed to avoid rare cases of damaged logs:
-    # We're looking stuff up on a dictionary, so if the line is
-    # broken the key may not exist and python complains
+
+    # Try statement needed to avoid rare cases of damaged logs. We're looking
+    # stuff up in a dictionary, so if the line is broken the key may not exist
+    # and python complains.
     try:
         if killer == killed:
             game.killsp[killer].append(weapon)
@@ -245,8 +218,12 @@ def lineProcKills(this_line, game, server):
 def lineProcCTF(this_line, game):
     '''Process CTF lines'''
 
+    # 9:40 CTF: 1 1 3: Inhakitor fragged RED's flag carrier!
+    # 10:18 CTF: 3 1 0: Mynard Killman got the RED flag!
     p_id = this_line[12]  # Player ID
     event = this_line[16]
+    # 0: flag taken; 1: flag cap;
+    # 2: flag return; 3: flag carrier fragged
     try:
         game.ctf[game.pid[p_id]][event] = game.ctf[game.pid[p_id]][event] + 1
     except:
@@ -257,6 +234,8 @@ def lineProcCTF(this_line, game):
 def lineProcAwards(this_line, game):
     '''Process line awards lines'''
 
+    # 3:02 Award: 4 2: Grunt gained the IMPRESSIVE award!
+    # 11:02 Award: 2 1: Kyonshi gained the EXCELLENT award!
     g_idx = this_line.find(' gained ')
     regex = re.compile(r'\d:\s(\S*\s?\S*)')  # Player name
     result = regex.search(this_line[0:g_idx])
@@ -282,6 +261,7 @@ def lineProcUserInfo(this_line, game):
     except:
         handicap = 100
 
+    # Team. 0: free for all; 1: red; 2: blue; 3: spectator
     regex = re.compile(r'\\t\\(\d)')
     team = regex.search(this_line).group(1)
 
@@ -316,17 +296,14 @@ def lineProcQuotes(this_line, game):
     return game
 
 
-def lineProcScores(this_line, game):
+def lineProcScores(this_line, game, min_play):
     '''Process scores lines'''
 
     #  5:40 score: 6  ping: 85  client: 2 Iagoi
     # 10:14 score: 12  ping: 62  client: 2 Iagoi
     regex = re.compile(
-        r'(\s?\s?\s? \S*) '
-        r'[\s][^\s]*[\s] (\S?\d*) '
-        r'[\s]+[^\s]*[\s] (\d*) '
-        r'[\s]+[^\s]*[\s] '
-        r'(\d*) \s (.*)',
+        r'(\s?\s?\s? \S*) [\s][^\s]*[\s] (\S?\d*) [\s]+[^\s]*[\s] (\d*) [\s]+'
+        r'[^\s]*[\s] (\d*) \s (.*)',
         re.VERBOSE
     )
     result = regex.search(this_line)
@@ -339,12 +316,13 @@ def lineProcScores(this_line, game):
     game.scores.append([time, score, ping, client, nick])
     game.players[nick] = (ping, game.pos)
     game.pos += 1  # Increase position for next player
+
     # Players are considered 'valid' if time played is greater than a
     # percentage of the time played by the 1st player who joined the game.
     # This: a) minimises the possibility of wrong item assignment due to
     # multiple connections and disconnections; b) results in fairer statistics
-    if (game.time - game.ptime[nick]) > MINPLAY *
-    (game.time - min(game.ptime.values())):
+    if ((game.time - game.ptime[nick]) > min_play *
+            (game.time - min(game.ptime.values()))):
         game.validp.append(nick)
     return game
 
@@ -407,9 +385,8 @@ def player_stats_total(cgames):
         frags, deaths, suics, wfrags = 0, 0, 0, 0
         awards_a, awards_c, awards_d, awards_e, awards_i = 0, 0, 0, 0, 0
         for i in range(len(cgames)):
-            if name not in cgames[i].validp:  # ignore no valid players
-                pass
-            else:
+            # Ignore no valid players
+            if name in cgames[i].validp:
                 game_stats = player_stats(cgames, i, name)
                 win = win + game_stats[1]
                 time = time + game_stats[2]
@@ -426,11 +403,10 @@ def player_stats_total(cgames):
                 awards_i = awards_i + game_stats[9][4]
                 weapon_count.append(game_stats[10])
                 ctf_events.append(game_stats[11])
-        if frags == 0:
-            # Take rid of players with autodownload 'off' who
-            # appear to join the server momentarily.
-            pass
-        else:
+
+        # Get rid of players with autodownload 'off' who appear to join the
+        # server momentarily.
+        if not frags == 0:
             one_player = {
                 'name': name, 'games': len(hand), 'won': win, 'time': time,
                 'hand': sum(hand)/len(hand),
@@ -508,44 +484,44 @@ def player_stats(cgames, game_number, player_name):
             wfrags, awards, weapon_count, ctf_events]
 
 
-def results_ordered(R, option, maxnumber):
+def results_ordered(R, sort_option, max_players=10):
     '''Sort the dictionary-storing list R according to the key specified
     by option. The inexistent keys 'frag_death_ratio' and 'won_percentage'
-    are added here for convenience. maxnumber limits the size of the
+    are added here for convenience. max_players limits the size of the
     output.'''
 
-    if is_number(maxnumber) is False:
+    if is_number(max_players) is False:
         print("\nINVALID MAXNUMBER VALUE IN results_ordered()")
         print("Check MAXPLAYERS option.\n")
         return
-    if maxnumber > len(R):
-        maxnumber = len(R)
-    elif maxnumber <= 0:
+    if max_players > len(R):
+        max_players = len(R)
+    elif max_players <= 0:
         print("\nINVALID MAXNUMBER VALUE IN results_ordered()")
         print("Check MAXPLAYERS option.\n")
         return
-    if option == 'frag_death_ratio':
+    if sort_option == 'frag_death_ratio':
         Rordered = sorted(R, key=lambda dic:
                           float(dic['frags'])/dic['deaths'], reverse=True)
-    elif option == 'won_percentage':
+    elif sort_option == 'won_percentage':
         Rordered = sorted(R, key=lambda dic:
                           float(dic['won'])/dic['games'], reverse=True)
-    elif option == 'frags_per_hour':
+    elif sort_option == 'frags_per_hour':
         Rordered = sorted(R, key=lambda dic:
                           float(dic['frags'])/dic['time'], reverse=True)
-    elif option == 'name':
+    elif sort_option == 'name':
         Rordered = sorted(R, key=lambda dic:
                           float(dic['frags'])/dic['deaths'], reverse=False)
-    elif option in R[0].keys():
-        Rordered = sorted(R, key=lambda dic: dic[option], reverse=True)
-    elif option not in R[0].keys():
+    elif sort_option in R[0].keys():
+        Rordered = sorted(R, key=lambda dic: dic[sort_option], reverse=True)
+    elif sort_option not in R[0].keys():
         print("\nINVALID ORDERING OPTION IN results_ordered()")
         print("Check spelling?\n")
         return
-    return Rordered[0:maxnumber]
+    return Rordered[0:max_players]
 
 
-def set_gametype(server):
+def set_gametype(server, gtype_override):
     '''Stats only tested with game types 0 and 4, but we'll
        report the correct game type in any case.'''
 
@@ -557,26 +533,26 @@ def set_gametype(server):
     }
 
     # If user specifies game type, report it regardless of what pyqscore parsed
-    if GTYPE_OVERRIDE in '':
+    if gtype_override in '':
         server.gtype = gametypes[server.gtype]
-    elif GTYPE_OVERRIDE in ['ctf', 'CTF']:
+    elif gtype_override in ['ctf', 'CTF']:
         server.gtype = 'Capture the Flag'
-    elif GTYPE_OVERRIDE in ['dm', 'DM']:
+    elif gtype_override in ['dm', 'DM']:
         server.gtype = 'Death Match'
-    elif GTYPE_OVERRIDE != '':
-        server.gtype = GTYPE_OVERRIDE
+    elif gtype_override != '':
+        server.gtype = gtype_override
     else:
         server.gtype = 'Unknown'
     return server
 
 
-def apply_ban(R, BAN_LIST):
+def apply_ban(R, ban_list):
     ''''Possibly naive implementation of a black list of players.'''
 
     R_names = [player['name'] for player in R]
     ban_list_index = []
 
-    for name in BAN_LIST:
+    for name in ban_list:
         if name in R_names:
             ban_list_index.append(R_names.index(name))
     for i in sorted(ban_list_index, reverse=True):
@@ -648,6 +624,8 @@ def make_stats_table(R):
 
     stats_table = []
     for i in range(len(R)):
+        # name        % games won  frags/deaths    frags/hour      frags/game
+        # deaths/hour deaths/game  suic+fall/hour  suic+fall/game  efficiency
         stats_table.append([
             R[i]['name'], 100. * R[i]['won'] / R[i]['games'],
             1. * R[i]['frags'] / (1 + R[i]['deaths']),
@@ -666,12 +644,12 @@ def make_stats_table(R):
     return stats_table
 
 
-def make_quotes_table(quotes_list):
+def make_quotes_table(quotes_list, max_quotes):
     '''Random quotes'''
 
     quotes_table = []
     if len(quotes_list) > 0:
-        for _ in range(NUMBER_OF_QUOTES):
+        for _ in range(max_quotes):
             a = quotes_list[int(randint(0, len(quotes_list)-1))]
             quotes_table.append([name_colour(a[0]), a[1]])
     return quotes_table
@@ -688,23 +666,33 @@ def make_ctf_table(R):
     return ctf_table
 
 
-def logToData(log_file):
+def logToData(
+    log_file, max_players=10, max_quotes=10, sort_option='time',
+    ban_list=['UnnamedPlayer', 'a_player_I_dont_like'], min_play=0.5,
+    gtype_override=''
+        ):
     '''Main wrapper to get the job done'''
 
     log = read_log(log_file)
-    server, cgames = mainProcessing(log)
+    server, cgames = mainProcessing(log, min_play)
     quotes_list = get_quotes(cgames)
 
+    # This situation may happen when attempting to analyse very small logs with
+    # a restrictive ban list
     if len(cgames) != 0:
         R = player_stats_total(cgames)
     else:
         print('\nNo valid games found in log. Play a bit more.\n')
         raise SystemExit()
 
-    R = results_ordered(R, SORT_OPTION, MAXPLAYERS)
-    server = set_gametype(server)  # update server with correct gametype
+    R = results_ordered(R, sort_option, max_players)
 
-    R = apply_ban(R, BAN_LIST)
+    # Update server with correct gametype
+    server = set_gametype(
+        server, gtype_override
+    )
+
+    R = apply_ban(R, ban_list)
     for player in R:
         player['name'] = name_colour(player['name'])
 
@@ -718,7 +706,8 @@ def logToData(log_file):
         'main': make_main_table(R),
         'stats': make_stats_table(R),
         'weapons': make_weapons_table(R),
-        'quotes': make_quotes_table(quotes_list)
+        'quotes': make_quotes_table(quotes_list, max_quotes),
+        'ctf': make_ctf_table(R)
     }
 
     return data
